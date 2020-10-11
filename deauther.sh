@@ -55,6 +55,18 @@ function checkExitCode(){
         fi
 }
 
+# Checks if the wireless interface is in managed mode
+function checkManagedMode(){
+        local INTERFACE=$1
+        local MODE=$(iwconfig 2>/dev/null | grep -E "${INTERFACE}" -A1 | grep "Mode" | cut -d ':' -f 2 | cut -d' ' -f1 | cut -d' ' -f1)
+        echo "[*] Interface ${INTERFACE} in ${MODE} mode"
+        if [ $MODE = 'Managed' ]; then
+                return 0
+        else
+                return 1
+        fi
+}
+
 # Checks if the wireless interface is in monitor mode
 function checkMonitorMode(){
         local INTERFACE=$1
@@ -142,6 +154,12 @@ checkExitCode $? "checkDependencies"
 
 checkWirelessInterface $1
 checkExitCode $? "checkWirelessInterface"
+
+checkManagedMode $INTERFACE
+if [ $? -eq 1 ]; then
+        managedMode $INTERFACE
+        checkExitCode $? "managedMode"
+fi
 
 # Scan for available networks and send output to file
 INTERFACE=$1
