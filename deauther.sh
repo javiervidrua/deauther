@@ -22,7 +22,8 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #SOFTWARE.
 
-# FUNCTIONS
+## FUNCTIONS
+# Checks the arguments passed to the tool
 function checkArguments(){
         if [ $# -ne 1 ];then
                 usage
@@ -31,6 +32,20 @@ function checkArguments(){
         return 0
 }
 
+# Check if the system meets the required dependencies
+function checkDependencies(){
+        if [ -z $(which macchanger) ]; then
+                echo "[-] You need to have installed macchanger"
+                return 1
+        fi
+        if [ -z $(which aircrack-ng) ]; then
+                echo "[-] You need to have installed aircrack-ng"
+                return 1
+        fi
+        return 0
+}
+
+# Checks the exit code of the functions and if not, ouputs error message and exits
 function checkExitCode(){
         if [ $1 -ne 0 ]; then
                 echo "[-] Error: $2"
@@ -40,6 +55,7 @@ function checkExitCode(){
         fi
 }
 
+# Checks if the wireless interface is in monitor mode
 function checkMonitorMode(){
         local INTERFACE=$1
         local MODE=$(iwconfig 2>/dev/null | grep -E "${INTERFACE}" -A1 | grep "Mode" | cut -d ':' -f 2 | cut -d' ' -f1 | cut -d' ' -f1)
@@ -51,6 +67,7 @@ function checkMonitorMode(){
         fi
 }
 
+# Checks if the wireless interface provided is available
 function checkWirelessInterface () {
         local INTERFACE=$1
         local INTERFACE_FOUND=0
@@ -69,43 +86,86 @@ function checkWirelessInterface () {
         fi
 }
 
+# Puts the wireless interface in monitor mode
 function monitorMode(){
-        trap '' 2 # SIGINT
+        trap '' 2
         INTERFACE=$1
         echo "[*] Putting interface ${INTERFACE} in monitor mode"
         ifconfig ${INTERFACE} down && iwconfig ${INTERFACE} mode monitor && ifconfig ${INTERFACE} up && echo "[*] Interface ${INTERFACE} is now on monitor mode" && return 0 || checkExitCode $? "monitorMode"
 }
 
+# Puts the wireless interface in managed mode
 function managedMode(){
-        trap '' 2 # SIGINT
+        trap '' 2
         INTERFACE=$1
         echo "[*] Putting interface ${INTERFACE} in managed mode"
         ifconfig ${INTERFACE} down && iwconfig ${INTERFACE} mode managed && ifconfig ${INTERFACE} up && echo "[*] Interface ${INTERFACE} is now on managed mode" && return 0 || checkExitCode $? "managedMode"
 }
 
+# Scans for networks and parses the output so we end up with the SSID, frequency, quality and ESSID of the networks, separated by spaces
+function scanAndParse(){
+        INTERFACE=$1
+        SCAN=$(iwlist $INTERFACE scan | grep -E 'Cell|ESSID|Frequency|Quality')
+
+        declare -a NETWORKS
+        local COUNTER=-1
+        while IFS= read -r LINE; do
+                echo $LINE | grep Address >/dev/null 2>&1 && ADDRESS=$(echo $LINE | grep Address)
+                if [ $? -eq 0 ]; then
+                        let COUNTER++
+                fi
+                echo $LINE | grep Frequency >/dev/null 2>&1 && FREQUENCY=$(echo $LINE | grep Frequency)
+                echo $LINE | grep Quality >/dev/null 2>&1 && QUALITY=$(echo $LINE | grep Quality)
+                ESSID=$(echo $LINE | grep ESSID)
+                if [ $? -ne 1 ]; then
+                        NETWORKS[COUNTER]="$ADDRESS $FREQUENCY $QUALITY $ESSID"
+                fi
+        done <<< "$SCAN"
+
+        for NETWORK in "${NETWORKS[@]}"; do
+                echo $NETWORK
+        done
+
+}
+
+# Outputs the usage
 function usage(){
         echo "[*] Usage: ./deauther.sh <INTERFACE>"
 }
 
-# MAIN
+## MAIN
 checkArguments $@
 checkExitCode $? "checkArguments"
+
+checkDependencies
+checkExitCode $? "checkDependencies"
 
 checkWirelessInterface $1
 checkExitCode $? "checkWirelessInterface"
 
+# Scan for available networks and send output to file
 INTERFACE=$1
+scanAndParse $INTERFACE | cut -d ' ' -f 4- > deauther_networks_temp.lst
+checkExitCode $? "scanAndParse"
+scanAndParse $INTERFACE | cut -d ' ' -f 4- >> deauther_networks_temp.lst
+checkExitCode $? "scanAndParse"
+scanAndParse $INTERFACE | cut -d ' ' -f 4- >> deauther_networks_temp.lst
+checkExitCode $? "scanAndParse"
+cat deauther_networks_temp.lst | sort -u > deauther_networks.lst
+checkExitCode $? "sortNetworksList"
+rm -rf deauther_networks_temp.lst
+checkExitCode $? "removeTemporalNetworksList"
+
+# Start sending 20 deauthentication packets to each network (previously put interface in monitor mode)
+#   mdk3
+
+exit
+
 checkMonitorMode $INTERFACE
 if [ $? -eq 1 ]; then
         monitorMode $INTERFACE
         checkExitCode $? "monitorMode"
 fi
-
-# use to get the SSIDs:
-#   sudo iw dev wlan0 scan | egrep "signal:|SSID:" | sed -e "s/\tsignal: //" -e "s/\tSSID: //" | awk '{ORS = (NR % 2 == 0)? "\n" : " "; print}' | sort
-
-# use to deauth
-#   mdk3
 
 echo "[*] Done"
 managedMode $INTERFACE
