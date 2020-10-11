@@ -2,9 +2,13 @@
 802.11b/g deauther.
 
 ## What does it do?
-* Puts the wireless interface in monitor mode
+* Checks if the system meets the required dependencies
+* Checks if the wireless interface is up and running
+* Scans for all the available networks
 * 
-* Puts the wireless interface in managed mode
+* Changes the mode of the wireless interface to monitor mode
+* Changes the mode of the wireless interface to managed mode
+* Restarts the networking services to enable internet connectivity
 
 ## Usage
 `./deauther <INTERFACE>`
