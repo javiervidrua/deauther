@@ -1,5 +1,5 @@
 # deauther
-*802.11b/g/n* deauther.
+*802.11b/g/n* deauther. Kicks out of the network every device connected to it using a deauthentication attack.
 
 To be a able to run the tool you'll need a wireless network interface that has a chip that supports **monitor mode**.
 
