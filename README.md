@@ -13,7 +13,7 @@
 * Restarts the networking services to enable internet connectivity
 
 ## Usage
-`./deauther <INTERFACE> <WHITELISTED_ESSID>`
+`./deauther <INTERFACE> [WHITELISTED_ESSID]`
 
 ## Example
 `./deauther wlan0 MyPersonalWiFi`
