@@ -40,12 +40,12 @@ function checkArguments(){
         trap '' 2
         if [ $# -eq 2 ];then
                 INTERFACE=$1
-                WHITELIST_ESSID=$2
-                echo "[*] WHITELIST_ESSID set to ${WHITELIST_ESSID}"
+                WHITELISTED_ESSID=$2
+                echo "[*] WHITELISTED_ESSID set to ${WHITELISTED_ESSID}"
                 return 0
         elif [ $# -eq 1 ];then
                 INTERFACE=$1
-                WHITELIST_ESSID=''
+                WHITELISTED_ESSID=''
                 return  0
         else
                 usage
@@ -199,8 +199,9 @@ function usage(){
 }
 
 ## MAIN
-declare WHITELIST_ESSID
+declare WHITELISTED_ESSID
 declare INTERFACE
+declare MAX_FAIL_COUNT=5
 checkArguments $@
 checkExitCode $? "checkArguments"
 
@@ -250,7 +251,7 @@ while IFS= read -r LINE; do
         SSID=$(echo $LINE | cut -d' ' -f2)
         CHANNEL=$(echo $LINE | cut -d' ' -f6 | cut -d')' -f1)
         ESSID=$(echo $LINE | cut -d'"' -f2)
-        if [[ "$ESSID" == "$WHITELIST_ESSID" ]]; then
+        if [[ "$ESSID" == "$WHITELISTED_ESSID" ]]; then
                 continue
         fi
         PACKETS=5
@@ -258,7 +259,7 @@ while IFS= read -r LINE; do
         if [ $? -ne 0 ]; then
                 let FAIL_COUNT++
         fi
-        if [ $FAIL_COUNT -ge 5 ]; then
+        if [ $FAIL_COUNT -ge $MAX_FAIL_COUNT ]; then
                 echo "[-] Too many errors while trying to attack ${ESSID}:${SSID} on channel ${CHANNEL} with ${PACKETS} packets"
                 break
         fi
