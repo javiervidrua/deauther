@@ -195,7 +195,7 @@ function setChannel(){
 
 # Outputs the usage
 function usage(){
-        echo "[*] Usage: ./deauther.sh <INTERFACE>"
+        echo "[*] Usage: ./deauther.sh <INTERFACE> <WHITELISTED_ESSID>"
 }
 
 ## MAIN
